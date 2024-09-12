@@ -4,24 +4,24 @@
 #include <netdb.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+
 #include <sys/select.h>
 #include <stdlib.h>
 #include <stdio.h>
 
 #define MAX_CLIENTS 1024
 
-typedef struct s_client
+typedef struct	s_client
 {
-	int				id;
-	int				fd;
-	char			*buf;
-	// struct s_client	*next;
+	int		fd;
+	int		id;
+	char*	buf;
 }	t_client;
 
 t_client	clients[MAX_CLIENTS];
 int			sockfd, connfd, maxfd;
 int			ids;
-fd_set		readfds; //, writedfs, activeds;
+fd_set		readfds;
 
 int extract_message(char **buf, char **msg)
 {
@@ -74,13 +74,12 @@ void	error(char* msg)
 {
 	write(STDERR_FILENO, msg, strlen(msg));
 	write(STDERR_FILENO, "\n", 1);
-	// close fds?
-	exit(1);	
+	exit(1);
 }
 
 void	sendall(int senderfd, const char* msg)
 {
-	for (int i = 0; i < MAX_CLIENTS; ++i)	// maxfd
+	for (int i = 0; i < maxfd; ++i)
 	{
 		if (clients[i].fd != -1 && clients[i].fd != senderfd)
 			if (send(clients[i].fd, msg, strlen(msg), 0) < 0)
@@ -88,13 +87,12 @@ void	sendall(int senderfd, const char* msg)
 	}
 }
 
-void	broadcast(int senderfd, int senderid, char *msg)
+void	broadcast(int senderfd, int senderid, char* msg)
 {
-	// char buf[4200000];
 	int		bufsize = snprintf(NULL, 0, "client %d: %s", senderid, msg) + 1;
 	char*	buf = malloc(bufsize);
 	if (!buf)
-		error("broadcast buffer allocation failed");
+		error("broadcast() buffer memory allocation failed");
 	snprintf(buf, bufsize, "client %d: %s", senderid, msg);
 	sendall(senderfd, buf);
 	free(buf);
@@ -107,7 +105,8 @@ void	removeclient(int i)
 	sendall(clients[i].fd, msg);
 
 	close(clients[i].fd);
-	free(clients[i].buf);
+	if (clients[i].buf)
+		free(clients[i].buf);
 	clients[i].fd = -1;
 	clients[i].buf = NULL;
 }
@@ -117,11 +116,11 @@ int	addclient(int sockfd)
 	connfd = accept(sockfd, 0, 0);
 	if (connfd < 0)
 		error("Fatal error");
-	
+
 	if (connfd > maxfd)
 		maxfd = connfd;
 	
-	for (int i = 0; i < MAX_CLIENTS; ++i)
+	for (int i = 0; i < maxfd; ++i)
 	{
 		if (clients[i].fd != -1)
 			continue;
@@ -129,7 +128,7 @@ int	addclient(int sockfd)
 		clients[i].id = ids++;
 		clients[i].buf = NULL;
 
-		char msg[64];
+		char	msg[64];
 		sprintf(msg, "server: client %d just arrived\n", clients[i].id);
 		sendall(clients[i].fd, msg);
 
@@ -162,25 +161,26 @@ void	handleclient(int i)
 	}
 }
 
-int main(int ac, char **av)
+
+
+int main(int ac, char** av)
 {
 	if (ac != 2)
 		error("Wrong number of arguments");
-
+	
 	int	port = atoi(av[1]);
 	if (port < 0)
 		error("Invalid port");
 
-	struct sockaddr_in servaddr; //, cli; 
+	struct sockaddr_in servaddr;
 
 	// socket create and verification 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0); 
-	if (sockfd < 0)
+	if (sockfd == -1)
 		error("Fatal error");
 
-	bzero(&servaddr, sizeof(servaddr)); 
-
 	// assign IP, PORT 
+	bzero(&servaddr, sizeof(servaddr)); 
 	servaddr.sin_family = AF_INET; 
 	servaddr.sin_addr.s_addr = htonl(2130706433); //127.0.0.1
 	servaddr.sin_port = htons(port); 
@@ -193,9 +193,7 @@ int main(int ac, char **av)
 		error("Fatal error");
 
 	for (int i = 0; i < MAX_CLIENTS; ++i)
-	{
 		clients[i].fd = -1;
-	}
 
 	while (42)
 	{
@@ -203,7 +201,7 @@ int main(int ac, char **av)
 		FD_SET(sockfd, &readfds);
 		maxfd = sockfd;
 
-		for (int i = 0; i < MAX_CLIENTS; ++i)
+		for (int i = 0; i < maxfd; ++i)
 		{
 			if (clients[i].fd != -1)
 			{
@@ -217,11 +215,9 @@ int main(int ac, char **av)
 			continue;
 		
 		if (FD_ISSET(sockfd, &readfds))
-		{
 			addclient(sockfd);
-		}
 
-		for (int i = 0; i < MAX_CLIENTS; ++i)
+		for (int i = 0; i < maxfd; ++i)
 		{
 			if (clients[i].fd != -1 && FD_ISSET(clients[i].fd, &readfds))
 				handleclient(i);
